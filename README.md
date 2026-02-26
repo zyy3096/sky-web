@@ -3,11 +3,17 @@
 使用方法：
 
 python3 -m venv venv
+
 source venv/bin/activate
+
 pip install -r requirements.txt
+
 export ADMIN_USER=admin
+
 export ADMIN_PASSWORD='换成强密码'
+
 export FLASK_SECRET='换成随机长字符串'
+
 python app.py
 
 
