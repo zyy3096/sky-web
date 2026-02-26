@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>qB 控制面板（限速 / 暂停恢复）</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; }
+    .card { border:1px solid #ddd; border-radius:10px; padding:16px; max-width:920px; }
+    label { display:block; font-size:14px; margin-top:10px; }
+    input, select { width: 340px; padding:8px; font-size:14px; }
+    .btn { padding:8px 12px; font-size:14px; cursor:pointer; }
+    .ok { color: #0a7; }
+    .err { color: #c00; }
+    .flash { margin: 8px 0; }
+    .small { color:#666; font-size: 13px; }
+    code { background:#f6f6f6; padding:2px 6px; border-radius:6px; }
+    .grid2 { display:flex; gap:16px; flex-wrap:wrap; }
+    .hint { color:#666; font-size:12px; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h2>qB 控制面板：限速 / 暂停恢复（二选一）</h2>
+  <p class="small">
+    以 <b>添加时间 added_on</b> 为基准：前 N 分钟执行“限速或暂停”；到点后执行“清除限速或恢复”。
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="card">
+        {% for cat,msg in messages %}
+          <div class="flash {{ 'ok' if cat=='ok' else 'err' }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="row">
+    <div class="card">
+      <h3>配置</h3>
+      <form method="post" action="/save" id="cfgForm">
+        <div class="grid2">
+          <div>
+            <label>scheme</label>
+            <select name="qb_scheme">
+              <option value="http"  {{ 'selected' if cfg.qb_scheme=='http' else '' }}>http</option>
+              <option value="https" {{ 'selected' if cfg.qb_scheme=='https' else '' }}>https</option>
+            </select>
+
+            <label>host（仅域名/IP）</label>
+            <input name="qb_host" value="{{ cfg.qb_host }}" placeholder="192.168.1.10 或 qb.example.com" required />
+
+            <label>port</label>
+            <input name="qb_port" value="{{ cfg.qb_port }}" type="number" min="1" max="65535" required />
+
+            <label>用户名</label>
+            <input name="qb_username" value="{{ cfg.qb_username }}" required />
+
+            <label>密码（明文保存到 config.json；只建议内网）</label>
+            <input name="qb_password" value="{{ cfg.qb_password }}" type="password" required />
+
+            <label>分类（默认 sky）</label>
+            <input name="qb_category" value="{{ cfg.qb_category }}" required />
+
+            <label>前 N 分钟（delay_minutes）</label>
+            <input name="delay_minutes" value="{{ cfg.delay_minutes }}" type="number" min="1" required />
+
+            <label>轮询间隔（秒）</label>
+            <input name="poll_seconds" value="{{ cfg.poll_seconds }}" type="number" min="5" required />
+
+            <label>
+              <input type="checkbox" name="verify_ssl" {{ 'checked' if cfg.verify_ssl else '' }} />
+              https 校验证书（自签可取消）
+            </label>
+          </div>
+
+          <div>
+            <label>模式</label>
+            <select name="mode" id="modeSel" onchange="toggleMode()">
+              <option value="pause_resume" {{ 'selected' if cfg.mode=='pause_resume' else '' }}>暂停/恢复</option>
+              <option value="limit" {{ 'selected' if cfg.mode=='limit' else '' }}>限速/清除限速</option>
+            </select>
+
+            <div id="pauseBox">
+              <label>pause_tag（用于避免误恢复）</label>
+              <input name="pause_tag" value="{{ cfg.pause_tag }}" />
+
+              <label>
+                <input type="checkbox" name="resume_only_when_paused" {{ 'checked' if cfg.resume_only_when_paused else '' }} />
+                仅当 state=paused*/stopped 才恢复（更稳）
+              </label>
+              <div class="hint">推荐开启：只恢复“脚本暂停过”的，并且确实处于暂停状态的种子。</div>
+            </div>
+
+            <div id="limitBox">
+              <label>上传限速（KiB/s）</label>
+              <input name="up_limit_kib" value="{{ cfg.up_limit_kib }}" type="number" min="0" />
+
+              <label>下载限速（KiB/s，0=不设置下载限速）</label>
+              <input name="down_limit_kib" value="{{ cfg.down_limit_kib }}" type="number" min="0" />
+
+              <label>
+                <input type="checkbox" name="clear_after" {{ 'checked' if cfg.clear_after else '' }} />
+                到点后清除限速（-1）
+              </label>
+              <div class="hint">勾选后：前 N 分钟限速；到点后恢复为不限速（-1）。</div>
+            </div>
+
+            <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" type="submit">保存</button>
+              <button class="btn" type="button" onclick="testConn()">Test Connection</button>
+            </div>
+            <div id="testResult" class="small" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>运行状态</h3>
+      <div>running: <b>{{ 'YES' if status.running else 'NO' }}</b></div>
+      <div>last_run: <code>{{ status.last_run }}</code></div>
+      <div>last_action: <code>{{ status.last_action }}</code></div>
+      <div>last_error: <code>{{ status.last_error }}</code></div>
+
+      <form method="post" action="/start" style="margin-top:12px;">
+        <button class="btn" type="submit">Start</button>
+      </form>
+      <form method="post" action="/stop" style="margin-top:8px;">
+        <button class="btn" type="submit">Stop</button>
+      </form>
+      <form method="post" action="/run-once" style="margin-top:8px;">
+        <button class="btn" type="submit">Run Once</button>
+      </form>
+
+      <p class="small" style="margin-top:12px;">
+        建议：仅内网访问；如需外网请加反代 + 强认证 + 防火墙。
+      </p>
+    </div>
+  </div>
+
+<script>
+function toggleMode(){
+  const mode = document.getElementById('modeSel').value;
+  document.getElementById('pauseBox').style.display = (mode === 'pause_resume') ? 'block' : 'none';
+  document.getElementById('limitBox').style.display = (mode === 'limit') ? 'block' : 'none';
+}
+toggleMode();
+
+async function testConn() {
+  const form = document.getElementById('cfgForm');
+  const fd = new FormData(form);
+  const resBox = document.getElementById('testResult');
+  resBox.textContent = 'Testing...';
+
+  try {
+    const r = await fetch('/test', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (j.ok) resBox.textContent = '✅ ' + (j.msg || 'OK');
+    else resBox.textContent = '❌ ' + (j.msg || (j.errors || []).join('; '));
+  } catch (e) {
+    resBox.textContent = '❌ ' + e;
+  }
+}
+</script>
+</body>
+</html>
