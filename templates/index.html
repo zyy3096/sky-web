@@ -12,6 +12,14 @@
     .btn { border-radius: 10px; }
     code { background:#f1f3f5; padding:2px 6px; border-radius:8px; }
     .muted { color:#6c757d; }
+
+    /* ✅ 修复长 label 串列/看不清 */
+    .form-check { min-width: 0; }
+    .form-check-label{
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+    }
   </style>
 </head>
 <body>
@@ -75,13 +83,15 @@
       {% for ep in cfg.endpoints %}
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <div class="d-flex align-items-center gap-2">
+          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_enabled" {{ 'checked' if ep.enabled else '' }}>
-                <label class="form-check-label">启用</label>
+                <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_enabled"
+                       name="ep_{{ ep.key }}_enabled" {{ 'checked' if ep.enabled else '' }}>
+                <label class="form-check-label" for="ep_{{ ep.key }}_enabled">启用</label>
               </div>
-              <input class="form-control" style="max-width:220px" form="mainForm" name="ep_{{ ep.key }}_name" value="{{ ep.name }}" placeholder="名称">
+              <input class="form-control" style="max-width:220px" form="mainForm"
+                     name="ep_{{ ep.key }}_name" value="{{ ep.name }}" placeholder="名称">
               <span class="badge bg-secondary">category: {{ ep.category }}</span>
               <span class="badge bg-info text-dark">mode: {{ ep.mode }}</span>
             </div>
@@ -130,8 +140,9 @@
 
             <div class="col-12">
               <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_verify_ssl" {{ 'checked' if ep.verify_ssl else '' }}>
-                <label class="form-check-label">verify_ssl（https 自签可取消）</label>
+                <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_verify_ssl"
+                       name="ep_{{ ep.key }}_verify_ssl" {{ 'checked' if ep.verify_ssl else '' }}>
+                <label class="form-check-label" for="ep_{{ ep.key }}_verify_ssl">verify_ssl（https 自签可取消）</label>
               </div>
             </div>
 
@@ -150,14 +161,15 @@
             <div class="col-12 col-md-4">
               <label class="form-label">clear_after（限速到点清除）</label>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_clear_after" {{ 'checked' if ep.clear_after else '' }}>
-                <label class="form-check-label">启用</label>
+                <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_clear_after"
+                       name="ep_{{ ep.key }}_clear_after" {{ 'checked' if ep.clear_after else '' }}>
+                <label class="form-check-label" for="ep_{{ ep.key }}_clear_after">启用</label>
               </div>
             </div>
 
             <div class="col-12">
               <div class="alert alert-light mb-0">
-                <div class="row g-2">
+                <div class="row g-2 align-items-end">
                   <div class="col-12 col-md-3">
                     <label class="form-label">UP limit (KiB/s)</label>
                     <input class="form-control" type="number" min="0" form="mainForm" name="ep_{{ ep.key }}_up_limit_kib" value="{{ ep.up_limit_kib }}">
@@ -167,7 +179,7 @@
                     <input class="form-control" type="number" min="0" form="mainForm" name="ep_{{ ep.key }}_down_limit_kib" value="{{ ep.down_limit_kib }}">
                   </div>
                   <div class="col-12 col-md-6">
-                    <div class="muted small mt-4">
+                    <div class="muted small">
                       限速模式：前 N 分钟限速；到点后可选清除限速（-1）。<br>
                       暂停/恢复：RSS 自动暂停 + 到点恢复 → 不勾 pause_before_delay，不勾 resume_requires_tag。
                     </div>
@@ -175,29 +187,45 @@
                 </div>
 
                 <hr>
+
                 <div class="row g-2">
-                  <div class="col-12 col-md-3">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_pause_before_delay" {{ 'checked' if ep.pause_before_delay else '' }}>
-                      <label class="form-check-label">pause_before_delay</label>
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_pause_before_delay"
+                             name="ep_{{ ep.key }}_pause_before_delay" {{ 'checked' if ep.pause_before_delay else '' }}>
+                      <label class="form-check-label" for="ep_{{ ep.key }}_pause_before_delay">
+                        前 N 分钟强制暂停（RSS 已暂停就别勾）
+                      </label>
                     </div>
                   </div>
-                  <div class="col-12 col-md-3">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_resume_only_when_paused" {{ 'checked' if ep.resume_only_when_paused else '' }}>
-                      <label class="form-check-label">resume_only_when_paused</label>
+
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_resume_only_when_paused"
+                             name="ep_{{ ep.key }}_resume_only_when_paused" {{ 'checked' if ep.resume_only_when_paused else '' }}>
+                      <label class="form-check-label" for="ep_{{ ep.key }}_resume_only_when_paused">
+                        仅当 paused/stopped 才恢复（推荐）
+                      </label>
                     </div>
                   </div>
-                  <div class="col-12 col-md-3">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_resume_requires_tag" {{ 'checked' if ep.resume_requires_tag else '' }}>
-                      <label class="form-check-label">resume_requires_tag</label>
+
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_resume_requires_tag"
+                             name="ep_{{ ep.key }}_resume_requires_tag" {{ 'checked' if ep.resume_requires_tag else '' }}>
+                      <label class="form-check-label" for="ep_{{ ep.key }}_resume_requires_tag">
+                        恢复时必须带 pause_tag（更安全）
+                      </label>
                     </div>
                   </div>
-                  <div class="col-12 col-md-3">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_use_done_tag" {{ 'checked' if ep.use_done_tag else '' }}>
-                      <label class="form-check-label">use_done_tag</label>
+
+                  <div class="col-12 col-md-6">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" form="mainForm" id="ep_{{ ep.key }}_use_done_tag"
+                             name="ep_{{ ep.key }}_use_done_tag" {{ 'checked' if ep.use_done_tag else '' }}>
+                      <label class="form-check-label" for="ep_{{ ep.key }}_use_done_tag">
+                        恢复后打 done_tag（防重复）
+                      </label>
                     </div>
                   </div>
 
@@ -205,11 +233,13 @@
                     <label class="form-label">pause_tag</label>
                     <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_pause_tag" value="{{ ep.pause_tag }}">
                   </div>
+
                   <div class="col-12 col-md-6">
                     <label class="form-label">done_tag</label>
                     <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_done_tag" value="{{ ep.done_tag }}">
                   </div>
                 </div>
+
               </div>
             </div>
 
