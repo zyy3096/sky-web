@@ -8,7 +8,16 @@ from functools import wraps
 from typing import Optional, Tuple, List, Dict
 
 import requests
-from flask import Flask, Response, flash, redirect, render_template, request, url_for, jsonify
+from flask import (
+    Flask,
+    Response,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+    jsonify,
+)
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
@@ -20,8 +29,10 @@ ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change-me")  # !!! 请务必修改
 FLASK_SECRET = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 
+
 def _check_basic_auth(auth) -> bool:
     return bool(auth and auth.username == ADMIN_USER and auth.password == ADMIN_PASSWORD)
+
 
 def require_basic_auth(fn):
     @wraps(fn)
@@ -34,7 +45,9 @@ def require_basic_auth(fn):
                 {"WWW-Authenticate": 'Basic realm="sky-web"'},
             )
         return fn(*args, **kwargs)
+
     return wrapper
+
 
 # =========================
 # 配置与校验
@@ -42,11 +55,20 @@ def require_basic_auth(fn):
 # 仅允许 hostname / IPv4 / 简单 IPv6 字符；不允许协议/路径，降低 SSRF 风险
 HOST_RE = re.compile(r"^[a-zA-Z0-9:\.\-]+$")
 
+
 def _is_valid_host(host: str) -> bool:
-    return bool(host and len(host) <= 255 and HOST_RE.match(host) and "/" not in host and "@" not in host)
+    return bool(
+        host
+        and len(host) <= 255
+        and HOST_RE.match(host)
+        and "/" not in host
+        and "@" not in host
+    )
+
 
 def _is_valid_scheme(s: str) -> bool:
     return s in ("http", "https")
+
 
 def _parse_int(name: str, v: str, min_v: int, max_v: int) -> Tuple[Optional[int], Optional[str]]:
     try:
@@ -57,16 +79,20 @@ def _parse_int(name: str, v: str, min_v: int, max_v: int) -> Tuple[Optional[int]
         return None, f"{name} 必须在 {min_v}~{max_v} 之间"
     return iv, None
 
+
 def _is_valid_mode(m: str) -> bool:
     return m in ("limit", "pause_resume")
 
+
 def _parse_bool(form: dict, key: str) -> bool:
     return form.get(key) == "on"
+
 
 def _split_tags(tags: str) -> List[str]:
     if not tags:
         return []
     return [t.strip() for t in str(tags).split(",") if t.strip()]
+
 
 @dataclass
 class Config:
@@ -88,8 +114,8 @@ class Config:
 
     # --------- 限速模式参数 ---------
     up_limit_kib: int = 10
-    down_limit_kib: int = 0      # 0=不设置下载限速
-    clear_after: bool = True     # 到点后清除限速（-1）
+    down_limit_kib: int = 0  # 0=不设置下载限速
+    clear_after: bool = True  # 到点后清除限速（-1）
 
     # --------- 暂停/恢复参数 ---------
     # 如果 RSS 已设置“进种自动暂停”，建议：
@@ -97,10 +123,11 @@ class Config:
     #   resume_requires_tag = False（无需 tag，直接到点恢复）
     pause_before_delay: bool = False
     resume_only_when_paused: bool = True  # 仅当 state=paused*/stopped 才恢复
-    resume_requires_tag: bool = False     # 恢复时是否必须包含 pause_tag
-    pause_tag: str = "SKY_DELAYED"        # pause_before_delay=True 时会打该 tag
-    done_tag: str = "SKY_RESUMED"         # 恢复后打该 tag，避免重复恢复
+    resume_requires_tag: bool = False  # 恢复时是否必须包含 pause_tag
+    pause_tag: str = "SKY_DELAYED"  # pause_before_delay=True 时会打该 tag
+    done_tag: str = "SKY_RESUMED"  # 恢复后打该 tag，避免重复恢复
     use_done_tag: bool = True
+
 
 def load_config() -> Config:
     if not os.path.exists(CONFIG_PATH):
@@ -111,9 +138,11 @@ def load_config() -> Config:
         d = json.load(f)
     return Config(**d)
 
+
 def save_config(cfg: Config) -> None:
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(asdict(cfg), f, ensure_ascii=False, indent=2)
+
 
 def validate_form(form: dict) -> Tuple[Optional[Config], list]:
     errors = []
@@ -138,19 +167,26 @@ def validate_form(form: dict) -> Tuple[Optional[Config], list]:
         errors.append("mode 必须是 limit 或 pause_resume")
 
     qb_port, e = _parse_int("qb_port", form.get("qb_port", ""), 1, 65535)
-    if e: errors.append(e)
+    if e:
+        errors.append(e)
 
     delay_minutes, e = _parse_int("delay_minutes", form.get("delay_minutes", ""), 1, 10_000_000)
-    if e: errors.append(e)
+    if e:
+        errors.append(e)
 
     poll_seconds, e = _parse_int("poll_seconds", form.get("poll_seconds", ""), 5, 3600)
-    if e: errors.append(e)
+    if e:
+        errors.append(e)
 
     up_limit_kib, e = _parse_int("up_limit_kib", form.get("up_limit_kib", "0") or "0", 0, 10_000_000)
-    if e: errors.append(e)
+    if e:
+        errors.append(e)
 
-    down_limit_kib, e = _parse_int("down_limit_kib", form.get("down_limit_kib", "0") or "0", 0, 10_000_000)
-    if e: errors.append(e)
+    down_limit_kib, e = _parse_int(
+        "down_limit_kib", form.get("down_limit_kib", "0") or "0", 0, 10_000_000
+    )
+    if e:
+        errors.append(e)
 
     pause_tag = (form.get("pause_tag") or "SKY_DELAYED").strip()
     done_tag = (form.get("done_tag") or "SKY_RESUMED").strip()
@@ -178,16 +214,13 @@ def validate_form(form: dict) -> Tuple[Optional[Config], list]:
         qb_username=qb_username,
         qb_password=qb_password,
         qb_category=qb_category,
-
         mode=mode,
         delay_minutes=delay_minutes,
         poll_seconds=poll_seconds,
         verify_ssl=verify_ssl,
-
         up_limit_kib=up_limit_kib,
         down_limit_kib=down_limit_kib,
         clear_after=clear_after,
-
         pause_before_delay=pause_before_delay,
         resume_only_when_paused=resume_only_when_paused,
         resume_requires_tag=resume_requires_tag,
@@ -196,6 +229,7 @@ def validate_form(form: dict) -> Tuple[Optional[Config], list]:
         use_done_tag=use_done_tag,
     )
     return cfg, []
+
 
 # =========================
 # qB API 封装
@@ -215,7 +249,6 @@ class QB:
             verify=self.cfg.verify_ssl,
         )
         r.raise_for_status()
-        # qB 登录成功通常返回 "Ok."
         if "Ok" not in r.text:
             raise RuntimeError(f"qB login failed: {r.text.strip()}")
 
@@ -232,12 +265,16 @@ class QB:
 
     def set_up_limit(self, hashes: str, limit_bps: int):
         url = f"{self.base}/api/v2/torrents/setUploadLimit"
-        r = self.sess.post(url, data={"hashes": hashes, "limit": limit_bps}, timeout=15, verify=self.cfg.verify_ssl)
+        r = self.sess.post(
+            url, data={"hashes": hashes, "limit": limit_bps}, timeout=15, verify=self.cfg.verify_ssl
+        )
         r.raise_for_status()
 
     def set_down_limit(self, hashes: str, limit_bps: int):
         url = f"{self.base}/api/v2/torrents/setDownloadLimit"
-        r = self.sess.post(url, data={"hashes": hashes, "limit": limit_bps}, timeout=15, verify=self.cfg.verify_ssl)
+        r = self.sess.post(
+            url, data={"hashes": hashes, "limit": limit_bps}, timeout=15, verify=self.cfg.verify_ssl
+        )
         r.raise_for_status()
 
     def pause(self, hashes: str):
@@ -252,13 +289,18 @@ class QB:
 
     def add_tags(self, hashes: str, tags: str):
         url = f"{self.base}/api/v2/torrents/addTags"
-        r = self.sess.post(url, data={"hashes": hashes, "tags": tags}, timeout=15, verify=self.cfg.verify_ssl)
+        r = self.sess.post(
+            url, data={"hashes": hashes, "tags": tags}, timeout=15, verify=self.cfg.verify_ssl
+        )
         r.raise_for_status()
 
     def remove_tags(self, hashes: str, tags: str):
         url = f"{self.base}/api/v2/torrents/removeTags"
-        r = self.sess.post(url, data={"hashes": hashes, "tags": tags}, timeout=15, verify=self.cfg.verify_ssl)
+        r = self.sess.post(
+            url, data={"hashes": hashes, "tags": tags}, timeout=15, verify=self.cfg.verify_ssl
+        )
         r.raise_for_status()
+
 
 # =========================
 # Worker：轮询执行
@@ -267,8 +309,10 @@ worker_thread: Optional[threading.Thread] = None
 worker_stop = threading.Event()
 worker_last_status = {"running": False, "last_run": None, "last_error": None, "last_action": None}
 
+
 def _join_hashes(hs: List[str]) -> str:
     return "|".join(hs) if hs else ""
+
 
 def _is_paused_state(state: str) -> bool:
     s = (state or "").strip().lower()
@@ -277,6 +321,7 @@ def _is_paused_state(state: str) -> bool:
     if s in ("stopped", "stoppedup", "stoppeddl"):
         return True
     return False
+
 
 def apply_once(cfg: Config) -> str:
     qb = QB(cfg)
@@ -383,6 +428,7 @@ def apply_once(cfg: Config) -> str:
 
     return "；".join(action_msg) if action_msg else "无操作（没有符合条件的种子）"
 
+
 def worker_loop():
     worker_last_status["running"] = True
     worker_last_status["last_error"] = None
@@ -398,7 +444,6 @@ def worker_loop():
             worker_last_status["last_run"] = int(time.time())
             worker_last_status["last_error"] = str(e)
 
-        # 等待下一轮
         try:
             sleep_s = load_config().poll_seconds
         except Exception:
@@ -407,17 +452,20 @@ def worker_loop():
 
     worker_last_status["running"] = False
 
+
 # =========================
 # Flask Web
 # =========================
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
 
+
 @app.get("/")
 @require_basic_auth
 def index():
     cfg = load_config()
     return render_template("index.html", cfg=cfg, status=worker_last_status)
+
 
 @app.post("/save")
 @require_basic_auth
@@ -432,6 +480,7 @@ def save():
     flash("保存成功", "ok")
     return redirect(url_for("index"))
 
+
 @app.post("/test")
 @require_basic_auth
 def test_conn():
@@ -445,6 +494,7 @@ def test_conn():
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)}), 500
 
+
 @app.post("/run-once")
 @require_basic_auth
 def run_once():
@@ -455,6 +505,7 @@ def run_once():
     except Exception as e:
         flash(f"执行失败：{e}", "error")
     return redirect(url_for("index"))
+
 
 @app.post("/start")
 @require_basic_auth
@@ -470,6 +521,7 @@ def start_worker():
     flash("已启动后台控制", "ok")
     return redirect(url_for("index"))
 
+
 @app.post("/stop")
 @require_basic_auth
 def stop_worker():
@@ -477,10 +529,12 @@ def stop_worker():
     flash("已请求停止（下一轮轮询会退出）", "ok")
     return redirect(url_for("index"))
 
+
 @app.get("/status")
 @require_basic_auth
 def status():
     return jsonify(worker_last_status)
+
 
 if __name__ == "__main__":
     bind_host = os.getenv("BIND_HOST", "127.0.0.1")
