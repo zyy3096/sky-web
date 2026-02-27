@@ -7,17 +7,7 @@
 
 ## 安装运行
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-export ADMIN_USER=admin
-export ADMIN_PASSWORD='改成强密码'
-export FLASK_SECRET='改成随机长字符串'
-
-python app.py
-```
+curl -fsSL https://raw.githubusercontent.com/zyy3096/sky-web/main/install.sh | sudo bash
 
 浏览器访问：`http://127.0.0.1:9876`（BasicAuth）
 
