@@ -7,9 +7,13 @@
 
 ## 远程安装
 
-```bash
+bash -lc 'set -euo pipefail
+sudo apt-get update -y
+sudo apt-get install -y git ca-certificates python3 python3-venv python3-pip unzip
+rm -rf /tmp/sky-web-install
+git clone https://github.com/zyy3096/sky-web.git /tmp/sky-web-install
+cd /tmp/sky-web-install
 bash install.sh
-```
 
 脚本会提示输入：
 - Web 绑定地址（127.0.0.1 / 0.0.0.0）
