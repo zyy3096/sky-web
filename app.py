@@ -276,16 +276,28 @@ class QB:
             url, data={"hashes": hashes, "limit": limit_bps}, timeout=15, verify=self.cfg.verify_ssl
         )
         r.raise_for_status()
-
     def pause(self, hashes: str):
-        url = f"{self.base}/api/v2/torrents/pause"
-        r = self.sess.post(url, data={"hashes": hashes}, timeout=15, verify=self.cfg.verify_ssl)
-        r.raise_for_status()
+        # qB v5: stop；qB v4: pause
+        for path in ("/api/v2/torrents/stop", "/api/v2/torrents/pause"):
+            url = f"{self.base}{path}"
+            r = self.sess.post(url, data={"hashes": hashes}, timeout=15, verify=self.cfg.verify_ssl)
+            if r.status_code == 404:
+                continue
+            r.raise_for_status()
+            return
+        raise RuntimeError("Neither /torrents/stop nor /torrents/pause exists (check WebUI base url/port).")
 
     def resume(self, hashes: str):
-        url = f"{self.base}/api/v2/torrents/resume"
-        r = self.sess.post(url, data={"hashes": hashes}, timeout=15, verify=self.cfg.verify_ssl)
-        r.raise_for_status()
+        # qB v5: start；qB v4: resume
+        for path in ("/api/v2/torrents/start", "/api/v2/torrents/resume"):
+            url = f"{self.base}{path}"
+            r = self.sess.post(url, data={"hashes": hashes}, timeout=15, verify=self.cfg.verify_ssl)
+            if r.status_code == 404:
+                continue
+            r.raise_for_status()
+            return
+        raise RuntimeError("Neither /torrents/start nor /torrents/resume exists (check WebUI base url/port).")
+
 
     def add_tags(self, hashes: str, tags: str):
         url = f"{self.base}/api/v2/torrents/addTags"
