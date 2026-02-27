@@ -3,188 +3,236 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SKY Web（qB：限速 / 暂停恢复）</title>
+  <title>SKY Web（多 qB：限速 / 暂停恢复）</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 24px; }
-    .row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
-    .card { border:1px solid #ddd; border-radius:12px; padding:16px; max-width:980px; }
-    label { display:block; font-size:14px; margin-top:10px; }
-    input, select { width: 380px; padding:8px; font-size:14px; }
-    .btn { padding:8px 12px; font-size:14px; cursor:pointer; }
-    .ok { color:#0a7; }
-    .err { color:#c00; }
-    .flash { margin: 6px 0; }
-    .small { color:#666; font-size: 13px; }
-    code { background:#f6f6f6; padding:2px 6px; border-radius:6px; }
-    .hint { color:#666; font-size:12px; margin-top:6px; }
-    .box { margin-top: 10px; padding: 10px; border:1px dashed #ddd; border-radius:10px; }
+    body { background: #f7f7fb; }
+    .card { border-radius: 14px; }
+    .form-control, .form-select { border-radius: 10px; }
+    .btn { border-radius: 10px; }
+    code { background:#f1f3f5; padding:2px 6px; border-radius:8px; }
+    .muted { color:#6c757d; }
   </style>
 </head>
 <body>
-  <h2>SKY Web：qB 控制面板（限速 / 暂停恢复）</h2>
-  <p class="small">
-    以 <b>qB torrents/info 的 added_on（添加时间）</b> 为基准：
-    前 N 分钟执行“限速”或“暂停（可选）”；到点后执行“清除限速”或“恢复”。
-  </p>
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">SKY Web</h3>
+      <div class="muted">支持多个 qB：按 <b>added_on</b> 对分类执行「限速」或「暂停/恢复」</div>
+    </div>
+    <div class="d-flex gap-2">
+      <form method="post" action="/start"><button class="btn btn-success">Start</button></form>
+      <form method="post" action="/stop"><button class="btn btn-outline-secondary">Stop</button></form>
+      <form method="post" action="/run-once-all"><button class="btn btn-primary">Run Once (All)</button></form>
+    </div>
+  </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="card">
+      <div class="mb-3">
         {% for cat,msg in messages %}
-          <div class="flash {{ 'ok' if cat=='ok' else 'err' }}">{{ msg }}</div>
+          <div class="alert {{ 'alert-success' if cat=='ok' else 'alert-danger' }} py-2 mb-2">{{ msg }}</div>
         {% endfor %}
       </div>
     {% endif %}
   {% endwith %}
 
-  <div class="row">
-    <div class="card">
-      <h3>配置</h3>
-      <form method="post" action="/save" id="cfgForm">
-        <label>scheme</label>
-        <select name="qb_scheme">
-          <option value="http"  {{ 'selected' if cfg.qb_scheme=='http' else '' }}>http</option>
-          <option value="https" {{ 'selected' if cfg.qb_scheme=='https' else '' }}>https</option>
-        </select>
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title mb-2">运行状态</h5>
+          <div class="small">running: <b>{{ 'YES' if status.running else 'NO' }}</b></div>
+          <div class="small">last_run: <code>{{ status.last_run }}</code></div>
+          <div class="small">last_action: <code>{{ status.last_action }}</code></div>
+          <div class="small">last_error: <code>{{ status.last_error }}</code></div>
 
-        <label>host（仅域名/IP）</label>
-        <input name="qb_host" value="{{ cfg.qb_host }}" required />
+          <hr>
+          <form method="post" action="/save" id="mainForm">
+            <label class="form-label mt-2">轮询间隔 poll_seconds</label>
+            <input class="form-control" type="number" min="5" name="poll_seconds" value="{{ cfg.poll_seconds }}">
 
-        <label>port</label>
-        <input name="qb_port" value="{{ cfg.qb_port }}" type="number" min="1" max="65535" required />
+            <div class="d-flex gap-2 mt-3">
+              <button class="btn btn-dark" type="submit">Save All</button>
+            </div>
+            <div class="muted small mt-2">
+              提示：qB 密码留空表示“保持不变”。<br>
+              监听地址默认 <code>127.0.0.1:9876</code>，需要外网请用反代/防火墙。
+            </div>
+          </form>
 
-        <label>用户名</label>
-        <input name="qb_username" value="{{ cfg.qb_username }}" required />
-
-        <label>密码（明文保存在 config.json；仅建议内网）</label>
-        <input name="qb_password" value="{{ cfg.qb_password }}" type="password" required />
-
-        <label>分类（只处理该分类，默认 sky）</label>
-        <input name="qb_category" value="{{ cfg.qb_category }}" required />
-
-        <label>前 N 分钟（delay_minutes）</label>
-        <input name="delay_minutes" value="{{ cfg.delay_minutes }}" type="number" min="1" required />
-
-        <label>轮询间隔（poll_seconds）</label>
-        <input name="poll_seconds" value="{{ cfg.poll_seconds }}" type="number" min="5" required />
-
-        <label>
-          <input type="checkbox" name="verify_ssl" {{ 'checked' if cfg.verify_ssl else '' }} />
-          https 校验证书（自签可取消）
-        </label>
-
-        <label>模式</label>
-        <select name="mode" id="modeSel" onchange="toggleMode()">
-          <option value="pause_resume" {{ 'selected' if cfg.mode=='pause_resume' else '' }}>暂停/恢复</option>
-          <option value="limit" {{ 'selected' if cfg.mode=='limit' else '' }}>限速/清除限速</option>
-        </select>
-
-        <div id="pauseBox" class="box">
-          <div class="small"><b>暂停/恢复模式</b>（RSS 已自动暂停：建议只做“到点恢复”）</div>
-
-          <label>
-            <input type="checkbox" name="pause_before_delay" {{ 'checked' if cfg.pause_before_delay else '' }} />
-            前 N 分钟强制 pause（RSS 已自动暂停就不勾）
-          </label>
-
-          <label>
-            <input type="checkbox" name="resume_only_when_paused" {{ 'checked' if cfg.resume_only_when_paused else '' }} />
-            仅当 state=paused*/stopped 才恢复（推荐勾）
-          </label>
-
-          <label>
-            <input type="checkbox" name="resume_requires_tag" {{ 'checked' if cfg.resume_requires_tag else '' }} />
-            恢复时必须包含 pause_tag（更安全；但 RSS 暂停不会打 tag 时请勿勾）
-          </label>
-
-          <label>pause_tag（脚本主动 pause 时才会打）</label>
-          <input name="pause_tag" value="{{ cfg.pause_tag }}" />
-
-          <label>
-            <input type="checkbox" name="use_done_tag" {{ 'checked' if cfg.use_done_tag else '' }} />
-            恢复后打 done_tag，避免反复 resume（推荐勾）
-          </label>
-
-          <label>done_tag</label>
-          <input name="done_tag" value="{{ cfg.done_tag }}" />
-
-          <div class="hint">
-            典型用法：RSS 进种自动暂停 + 45 分钟后上传 → 选择“暂停/恢复”，
-            不勾“前 N 分钟强制 pause”，不勾“恢复必须包含 pause_tag”，其余默认即可。
+          <div class="d-flex gap-2 mt-3">
+            <form method="post" action="/endpoint/add">
+              <button class="btn btn-outline-primary" type="submit">+ Add qB</button>
+            </form>
           </div>
         </div>
-
-        <div id="limitBox" class="box">
-          <div class="small"><b>限速模式</b></div>
-
-          <label>上传限速（KiB/s）</label>
-          <input name="up_limit_kib" value="{{ cfg.up_limit_kib }}" type="number" min="0" />
-
-          <label>下载限速（KiB/s，0=不设置）</label>
-          <input name="down_limit_kib" value="{{ cfg.down_limit_kib }}" type="number" min="0" />
-
-          <label>
-            <input type="checkbox" name="clear_after" {{ 'checked' if cfg.clear_after else '' }} />
-            到点后清除限速（-1）
-          </label>
-
-          <div class="hint">
-            前 N 分钟对该分类种子限速；到点后（可选）清除限速（-1）。
-          </div>
-        </div>
-
-        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="btn" type="submit">保存</button>
-          <button class="btn" type="button" onclick="testConn()">Test Connection</button>
-        </div>
-        <div id="testResult" class="small" style="margin-top:10px;"></div>
-      </form>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>运行状态</h3>
-      <div>running: <b>{{ 'YES' if status.running else 'NO' }}</b></div>
-      <div>last_run: <code>{{ status.last_run }}</code></div>
-      <div>last_action: <code>{{ status.last_action }}</code></div>
-      <div>last_error: <code>{{ status.last_error }}</code></div>
+    <div class="col-12 col-lg-8">
+      {% for ep in cfg.endpoints %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_enabled" {{ 'checked' if ep.enabled else '' }}>
+                <label class="form-check-label">启用</label>
+              </div>
+              <input class="form-control" style="max-width:220px" form="mainForm" name="ep_{{ ep.key }}_name" value="{{ ep.name }}" placeholder="名称">
+              <span class="badge bg-secondary">category: {{ ep.category }}</span>
+              <span class="badge bg-info text-dark">mode: {{ ep.mode }}</span>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" type="button" onclick="testEp('{{ ep.key }}')">Test</button>
+              <form method="post" action="/endpoint/run-once/{{ ep.key }}">
+                <button class="btn btn-primary btn-sm" type="submit">Run Once</button>
+              </form>
+              <form method="post" action="/endpoint/delete/{{ ep.key }}" onsubmit="return confirm('确定删除该 qB 配置？')">
+                <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+              </form>
+            </div>
+          </div>
 
-      <form method="post" action="/start" style="margin-top:12px;">
-        <button class="btn" type="submit">Start</button>
-      </form>
-      <form method="post" action="/stop" style="margin-top:8px;">
-        <button class="btn" type="submit">Stop</button>
-      </form>
-      <form method="post" action="/run-once" style="margin-top:8px;">
-        <button class="btn" type="submit">Run Once</button>
-      </form>
+          <div id="test_{{ ep.key }}" class="small muted mb-2"></div>
 
-      <p class="small" style="margin-top:12px;">
-        默认只监听 <code>127.0.0.1:9876</code>。如需外部访问建议用反代 + 强认证 + 防火墙。
-      </p>
+          <div class="row g-2">
+            <div class="col-12 col-md-3">
+              <label class="form-label">scheme</label>
+              <select class="form-select" form="mainForm" name="ep_{{ ep.key }}_scheme">
+                <option value="http"  {{ 'selected' if ep.scheme=='http' else '' }}>http</option>
+                <option value="https" {{ 'selected' if ep.scheme=='https' else '' }}>https</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">host</label>
+              <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_host" value="{{ ep.host }}" placeholder="144.217.x.x">
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label">port</label>
+              <input class="form-control" type="number" min="1" max="65535" form="mainForm" name="ep_{{ ep.key }}_port" value="{{ ep.port }}">
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">qB username</label>
+              <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_username" value="{{ ep.username }}">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label">qB password</label>
+              <input class="form-control" type="password" form="mainForm" name="ep_{{ ep.key }}_password" placeholder="留空=不修改">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label">category</label>
+              <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_category" value="{{ ep.category }}">
+            </div>
+
+            <div class="col-12">
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_verify_ssl" {{ 'checked' if ep.verify_ssl else '' }}>
+                <label class="form-check-label">verify_ssl（https 自签可取消）</label>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">mode</label>
+              <select class="form-select" form="mainForm" name="ep_{{ ep.key }}_mode">
+                <option value="pause_resume" {{ 'selected' if ep.mode=='pause_resume' else '' }}>暂停/恢复</option>
+                <option value="limit" {{ 'selected' if ep.mode=='limit' else '' }}>限速/清除限速</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label">delay_minutes</label>
+              <input class="form-control" type="number" min="1" form="mainForm" name="ep_{{ ep.key }}_delay_minutes" value="{{ ep.delay_minutes }}">
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">clear_after（限速到点清除）</label>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_clear_after" {{ 'checked' if ep.clear_after else '' }}>
+                <label class="form-check-label">启用</label>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="alert alert-light mb-0">
+                <div class="row g-2">
+                  <div class="col-12 col-md-3">
+                    <label class="form-label">UP limit (KiB/s)</label>
+                    <input class="form-control" type="number" min="0" form="mainForm" name="ep_{{ ep.key }}_up_limit_kib" value="{{ ep.up_limit_kib }}">
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <label class="form-label">DOWN limit (KiB/s)</label>
+                    <input class="form-control" type="number" min="0" form="mainForm" name="ep_{{ ep.key }}_down_limit_kib" value="{{ ep.down_limit_kib }}">
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <div class="muted small mt-4">
+                      限速模式：前 N 分钟限速；到点后可选清除限速（-1）。<br>
+                      暂停/恢复：RSS 自动暂停 + 到点恢复 → 不勾 pause_before_delay，不勾 resume_requires_tag。
+                    </div>
+                  </div>
+                </div>
+
+                <hr>
+                <div class="row g-2">
+                  <div class="col-12 col-md-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_pause_before_delay" {{ 'checked' if ep.pause_before_delay else '' }}>
+                      <label class="form-check-label">pause_before_delay</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_resume_only_when_paused" {{ 'checked' if ep.resume_only_when_paused else '' }}>
+                      <label class="form-check-label">resume_only_when_paused</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_resume_requires_tag" {{ 'checked' if ep.resume_requires_tag else '' }}>
+                      <label class="form-check-label">resume_requires_tag</label>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" form="mainForm" name="ep_{{ ep.key }}_use_done_tag" {{ 'checked' if ep.use_done_tag else '' }}>
+                      <label class="form-check-label">use_done_tag</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">pause_tag</label>
+                    <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_pause_tag" value="{{ ep.pause_tag }}">
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">done_tag</label>
+                    <input class="form-control" form="mainForm" name="ep_{{ ep.key }}_done_tag" value="{{ ep.done_tag }}">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+      {% endfor %}
     </div>
   </div>
 
+</div>
+
 <script>
-function toggleMode(){
-  const mode = document.getElementById('modeSel').value;
-  document.getElementById('pauseBox').style.display = (mode === 'pause_resume') ? 'block' : 'none';
-  document.getElementById('limitBox').style.display = (mode === 'limit') ? 'block' : 'none';
-}
-toggleMode();
-
-async function testConn() {
-  const form = document.getElementById('cfgForm');
-  const fd = new FormData(form);
-  const resBox = document.getElementById('testResult');
-  resBox.textContent = 'Testing...';
-
-  try {
-    const r = await fetch('/test', { method: 'POST', body: fd });
+async function testEp(key){
+  const el = document.getElementById('test_'+key);
+  el.textContent = 'Testing...';
+  try{
+    const r = await fetch('/endpoint/test/' + key, {method:'POST'});
     const j = await r.json();
-    if (j.ok) resBox.textContent = '✅ ' + (j.msg || 'OK');
-    else resBox.textContent = '❌ ' + (j.msg || (j.errors || []).join('; '));
-  } catch (e) {
-    resBox.textContent = '❌ ' + e;
+    el.textContent = j.ok ? ('✅ ' + j.msg) : ('❌ ' + (j.msg || 'fail'));
+  }catch(e){
+    el.textContent = '❌ ' + e;
   }
 }
 </script>
