@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SKY Web（qB：限速 / 暂停恢复）</title>
+  <style>
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; margin: 24px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:16px; max-width:980px; }
+    label { display:block; font-size:14px; margin-top:10px; }
+    input, select { width: 380px; padding:8px; font-size:14px; }
+    .btn { padding:8px 12px; font-size:14px; cursor:pointer; }
+    .ok { color:#0a7; }
+    .err { color:#c00; }
+    .flash { margin: 6px 0; }
+    .small { color:#666; font-size: 13px; }
+    code { background:#f6f6f6; padding:2px 6px; border-radius:6px; }
+    .hint { color:#666; font-size:12px; margin-top:6px; }
+    .box { margin-top: 10px; padding: 10px; border:1px dashed #ddd; border-radius:10px; }
+  </style>
+</head>
+<body>
+  <h2>SKY Web：qB 控制面板（限速 / 暂停恢复）</h2>
+  <p class="small">
+    以 <b>qB torrents/info 的 added_on（添加时间）</b> 为基准：
+    前 N 分钟执行“限速”或“暂停（可选）”；到点后执行“清除限速”或“恢复”。
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="card">
+        {% for cat,msg in messages %}
+          <div class="flash {{ 'ok' if cat=='ok' else 'err' }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="row">
+    <div class="card">
+      <h3>配置</h3>
+      <form method="post" action="/save" id="cfgForm">
+        <label>scheme</label>
+        <select name="qb_scheme">
+          <option value="http"  {{ 'selected' if cfg.qb_scheme=='http' else '' }}>http</option>
+          <option value="https" {{ 'selected' if cfg.qb_scheme=='https' else '' }}>https</option>
+        </select>
+
+        <label>host（仅域名/IP）</label>
+        <input name="qb_host" value="{{ cfg.qb_host }}" required />
+
+        <label>port</label>
+        <input name="qb_port" value="{{ cfg.qb_port }}" type="number" min="1" max="65535" required />
+
+        <label>用户名</label>
+        <input name="qb_username" value="{{ cfg.qb_username }}" required />
+
+        <label>密码（明文保存在 config.json；仅建议内网）</label>
+        <input name="qb_password" value="{{ cfg.qb_password }}" type="password" required />
+
+        <label>分类（只处理该分类，默认 sky）</label>
+        <input name="qb_category" value="{{ cfg.qb_category }}" required />
+
+        <label>前 N 分钟（delay_minutes）</label>
+        <input name="delay_minutes" value="{{ cfg.delay_minutes }}" type="number" min="1" required />
+
+        <label>轮询间隔（poll_seconds）</label>
+        <input name="poll_seconds" value="{{ cfg.poll_seconds }}" type="number" min="5" required />
+
+        <label>
+          <input type="checkbox" name="verify_ssl" {{ 'checked' if cfg.verify_ssl else '' }} />
+          https 校验证书（自签可取消）
+        </label>
+
+        <label>模式</label>
+        <select name="mode" id="modeSel" onchange="toggleMode()">
+          <option value="pause_resume" {{ 'selected' if cfg.mode=='pause_resume' else '' }}>暂停/恢复</option>
+          <option value="limit" {{ 'selected' if cfg.mode=='limit' else '' }}>限速/清除限速</option>
+        </select>
+
+        <div id="pauseBox" class="box">
+          <div class="small"><b>暂停/恢复模式</b>（RSS 已自动暂停：建议只做“到点恢复”）</div>
+
+          <label>
+            <input type="checkbox" name="pause_before_delay" {{ 'checked' if cfg.pause_before_delay else '' }} />
+            前 N 分钟强制 pause（RSS 已自动暂停就不勾）
+          </label>
+
+          <label>
+            <input type="checkbox" name="resume_only_when_paused" {{ 'checked' if cfg.resume_only_when_paused else '' }} />
+            仅当 state=paused*/stopped 才恢复（推荐勾）
+          </label>
+
+          <label>
+            <input type="checkbox" name="resume_requires_tag" {{ 'checked' if cfg.resume_requires_tag else '' }} />
+            恢复时必须包含 pause_tag（更安全；但 RSS 暂停不会打 tag 时请勿勾）
+          </label>
+
+          <label>pause_tag（脚本主动 pause 时才会打）</label>
+          <input name="pause_tag" value="{{ cfg.pause_tag }}" />
+
+          <label>
+            <input type="checkbox" name="use_done_tag" {{ 'checked' if cfg.use_done_tag else '' }} />
+            恢复后打 done_tag，避免反复 resume（推荐勾）
+          </label>
+
+          <label>done_tag</label>
+          <input name="done_tag" value="{{ cfg.done_tag }}" />
+
+          <div class="hint">
+            典型用法（你的需求）：RSS 进种自动暂停 + 45 分钟后上传 → 选择“暂停/恢复”，
+            不勾“前 N 分钟强制 pause”，不勾“恢复必须包含 pause_tag”，其余保持默认即可。
+          </div>
+        </div>
+
+        <div id="limitBox" class="box">
+          <div class="small"><b>限速模式</b></div>
+
+          <label>上传限速（KiB/s）</label>
+          <input name="up_limit_kib" value="{{ cfg.up_limit_kib }}" type="number" min="0" />
+
+          <label>下载限速（KiB/s，0=不设置）</label>
+          <input name="down_limit_kib" value="{{ cfg.down_limit_kib }}" type="number" min="0" />
+
+          <label>
+            <input type="checkbox" name="clear_after" {{ 'checked' if cfg.clear_after else '' }} />
+            到点后清除限速（-1）
+          </label>
+
+          <div class="hint">
+            前 N 分钟对该分类种子限速；到点后（可选）清除限速（-1）。
+          </div>
+        </div>
+
+        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn" type="submit">保存</button>
+          <button class="btn" type="button" onclick="testConn()">Test Connection</button>
+        </div>
+        <div id="testResult" class="small" style="margin-top:10px;"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>运行状态</h3>
+      <div>running: <b>{{ 'YES' if status.running else 'NO' }}</b></div>
+      <div>last_run: <code>{{ status.last_run }}</code></div>
+      <div>last_action: <code>{{ status.last_action }}</code></div>
+      <div>last_error: <code>{{ status.last_error }}</code></div>
+
+      <form method="post" action="/start" style="margin-top:12px;">
+        <button class="btn" type="submit">Start</button>
+      </form>
+      <form method="post" action="/stop" style="margin-top:8px;">
+        <button class="btn" type="submit">Stop</button>
+      </form>
+      <form method="post" action="/run-once" style="margin-top:8px;">
+        <button class="btn" type="submit">Run Once</button>
+      </form>
+
+      <p class="small" style="margin-top:12px;">
+        默认只监听 <code>127.0.0.1:9876</code>。如需外部访问建议用反代 + 强认证 + 防火墙。
+      </p>
+    </div>
+  </div>
+
+<script>
+function toggleMode(){
+  const mode = document.getElementById('modeSel').value;
+  document.getElementById('pauseBox').style.display = (mode === 'pause_resume') ? 'block' : 'none';
+  document.getElementById('limitBox').style.display = (mode === 'limit') ? 'block' : 'none';
+}
+toggleMode();
+
+async function testConn() {
+  const form = document.getElementById('cfgForm');
+  const fd = new FormData(form);
+  const resBox = document.getElementById('testResult');
+  resBox.textContent = 'Testing...';
+
+  try {
+    const r = await fetch('/test', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (j.ok) resBox.textContent = '✅ ' + (j.msg || 'OK');
+    else resBox.textContent = '❌ ' + (j.msg || (j.errors || []).join('; '));
+  } catch (e) {
+    resBox.textContent = '❌ ' + e;
+  }
+}
+</script>
+</body>
+</html>
