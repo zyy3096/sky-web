@@ -345,8 +345,8 @@ def apply_once_endpoint(ep: Endpoint) -> str:
             AFTER_UP_BPS = 400 * 1024 * 1024  # 400 MiB/s
             qb.set_up_limit(_join_hashes(to_clear), AFTER_UP_BPS)
             if ep.down_limit_kib > 0:
-                qb.set_down_limit(_join_hashes(to_clear), -1)
-            msgs.append(f"clear {len(to_clear)}")
+                qb.set_down_limit(_join_hashes(to_clear), 0)
+            msgs.append(f"stage2 {len(to_clear)} UP=400MiB/s")
 
     else:
         if to_pause:
